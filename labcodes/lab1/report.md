@@ -364,3 +364,110 @@ Breakpoint 2, vcprintf (fmt=0x10323c "%s\n\n", ap=0x7ba4 " 2\020") at kern/libs/
 + 初始化栈指针，建立堆栈
 
 + 进入启动主程序`bootmain`
+
+
+
+## 练习四
+
+> 通过阅读bootmain.c，了解bootloader如何加载ELF文件。通过分析源代码和通过qemu来运行并调试bootloader&OS，
+>
+> - bootloader如何读取硬盘扇区的？
+> - bootloader是如何加载ELF格式的OS？
+>
+> 提示：可阅读“硬盘访问概述”，“ELF执行文件格式概述”这两小节。
+
+#### 读取硬盘扇区
+
+在`bootmain.c`中主要由
+
+`readseg(uintptr_t va, uint32_t count, uint32_t offset)`函数以及`readsect(void *dst, uint32_t secno)`执行。
+
+`readsect`函数执行过程：
+
+````C
+ 37 static void		//等待磁盘空闲函数
+ 38 waitdisk(void) {
+ 39     while ((inb(0x1F7) & 0xC0) != 0x40);	//通过读取状态寄存器实现
+ 41 }   
+ 42     
+ 43 
+ 44 static void
+ 45 readsect(void *dst, uint32_t secno) {
+ 46    
+ 47     waitdisk();  //等待磁盘空闲
+ 48     
+ 49     outb(0x1F2, 1);                         // 读取一个扇区
+ 		
+ 		//secno指定扇区号和地址，0-27位是偏移地址，29-31位强制设为1，28位(=0)表示访问"Disk 0"
+ 50     outb(0x1F3, secno & 0xFF);
+ 51     outb(0x1F4, (secno >> 8) & 0xFF);
+ 52     outb(0x1F5, (secno >> 16) & 0xFF);
+ 53     outb(0x1F6, ((secno >> 24) & 0xF) | 0xE0);
+ 
+ 54     outb(0x1F7, 0x20);         //读磁盘命令
+		//再次等待磁盘空闲
+ 57     waitdisk();
+ 58     
+ 59     // 从0x1F0读取数据到dst
+ 60     insl(0x1F0, dst, SECTSIZE / 4);
+ 61 }  
+````
+
+`readseg`对其进行了封装，实现了读取`count`字节数据的功能
+
+````c
+68 readseg(uintptr_t va, uint32_t count, uint32_t offset) {
+ 69     uintptr_t end_va = va + count;	//数据存储的结束位置
+ 70     
+ 71     // 为什么不end_va +=  offset % SECTSIZE ???
+ 72     va -= offset % SECTSIZE;
+ 73     
+ 74     // 从字节转换为扇区号，kernel扇区号1开始的
+ 75     uint32_t secno = (offset / SECTSIZE) + 1;
+ 76     
+ 77     // 循环读取
+ 80     for (; va < end_va; va += SECTSIZE, secno ++) {
+ 81         readsect((void *)va, secno);                                                                
+ 82     }
+ 83 }   
+
+````
+
+#### 加载ELF格式的OS
+
+在`void boootmain()`函数中实现
+
+````c
+86 void
+ 87 bootmain(void) {
+ 88     // 读取硬盘中的elf头
+ 89     readseg((uintptr_t)ELFHDR, SECTSIZE * 8, 0);
+ 90     
+ 91     // 判断elf头是否合法
+ 92     if (ELFHDR->e_magic != ELF_MAGIC) {
+ 93         goto bad;
+ 94     }
+ 95     
+ 96     struct proghdr *ph, *eph; //程序表指针
+ 97     
+ 98     
+ 99     ph = (struct proghdr *)((uintptr_t)ELFHDR + ELFHDR->e_phoff);//ph表的地址
+100     eph = ph + ELFHDR->e_phnum;	//ph表的结尾
+		//将每个程序段读取到对应在内存中的虚拟地址中去
+101     for (; ph < eph; ph ++) {
+102         readseg(ph->p_va & 0xFFFFFF, ph->p_memsz, ph->p_offset);
+103     }
+104     
+105     // 根据elf头部的入口信息，从程序入口启动内核
+107     ((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))();
+108     
+109 bad:	//读取出错
+110     outw(0x8A00, 0x8A00);                                                             
+111     outw(0x8A00, 0x8E00);
+112     
+113     /* do nothing */
+114     while (1);
+115 }   
+
+````
+

@@ -471,3 +471,45 @@ Breakpoint 2, vcprintf (fmt=0x10323c "%s\n\n", ap=0x7ba4 " 2\020") at kern/libs/
 
 ````
 
+## 练习五
+
+#### 实现过程
+
+> 按照注释中一步一步实现
+
+````c
+305     uint32_t ebp = read_ebp(); 	//当前栈底位置
+306     uint32_t eip = read_eip(); 	//当前pc
+307     int i; 
+308     for(i = 0;i < STACKFRAME_DEPTH;i++){	//循环打印整个调用栈信息，最多到栈的深度
+309         cprintf("ebp:0x%08x eip:0x%08x ",ebp,eip); //当前ebp,eip
+310         cprintf("args:"); 
+311         uint32_t *args = (uint32_t *)ebp + 2; //当前ebp向上四个为可能的参数**注意在指针上+2相当于在地址上+8
+312         cprintf("%08x %08x %08x %08x",args[0],args[1],args[2],args[3]); 
+313         cprintf("\n"); 
+314         print_debuginfo(eip - 1);//打印函数名等信息 
+315         eip =  ((uint32_t *) ebp)[1]; 	//caller的eip在当前函数返回地址，即ebp上一个
+316         ebp = ((uint32_t *) ebp)[0]; 	//caller的ebp就是当前ebp指向位置内数据
+317         if(ebp == 0) break; 			//如果到了整个栈底，结束
+318		}
+````
+
+#### 解释最后一行各个数值的含义
+
+打印出来的最后一行为
+
+```assembly
+ebp:0x00007bf8 eip:0x00007d68 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8
+```
+
+对应第一个被调用的函数`bootmain`，其`caller`的起始地址是`0x7c00`，栈底是`0x7bf8`，故`bootmain`的`ebp`是`0x7bf8`。`eip`是`bootmain`调用下一个函数返回后要执行的下一条指令地址，`args`是`bootmain`被调用的参数
+
+## 练习六
+
+> 1.中断描述符表（也可简称为保护模式下的中断向量表）中一个表项占多少字节？其中哪几位代表中断处理代码的入口？
+
+8个字节，如下所示，第1-2字节和第7-8字节为偏移，第4-5字节为段选择子，他们一起构成了中断处理代码的入口。
+
+>   offset      P DPL...        ss                    offset
+>
+> 31----16   15--------0   31------16         15-----0

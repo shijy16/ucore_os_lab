@@ -46,6 +46,22 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
+
+	extern uintptr_t __vectors[];	
+	/* *
+	 * Set up a normal interrupt/trap gate descriptor
+	 *   - istrap: 1 for a trap (= exception) gate, 0 for an interrupt gate
+	 *   - sel: Code segment selector for interrupt/trap handler
+	 *   - off: Offset in code segment for interrupt/trap handler
+	 *   - dpl: Descriptor Privilege Level - the privilege level required
+	 *          for software to invoke this interrupt/trap gate explicitly
+	 *          using an int instruction.
+	 * */
+	SETGATE(gate, istrap, sel, off, dpl)
+	int i = 0;
+	for(i = 0;i < 256;i++ ){
+		SETGATE(idt,1)
+	}
 }
 
 static const char *

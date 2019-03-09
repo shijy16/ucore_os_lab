@@ -490,7 +490,7 @@ Breakpoint 2, vcprintf (fmt=0x10323c "%s\n\n", ap=0x7ba4 " 2\020") at kern/libs/
 314         print_debuginfo(eip - 1);//打印函数名等信息 
 315         eip =  ((uint32_t *) ebp)[1]; 	//caller的eip在当前函数返回地址，即ebp上一个
 316         ebp = ((uint32_t *) ebp)[0]; 	//caller的ebp就是当前ebp指向位置内数据
-317         if(ebp == 0) break; 			//如果到了整个栈底，结束
+317         if(ebp == 0) break; 			//到0后会发生循环，在此处停止
 318		}
 ````
 
@@ -502,7 +502,7 @@ Breakpoint 2, vcprintf (fmt=0x10323c "%s\n\n", ap=0x7ba4 " 2\020") at kern/libs/
 ebp:0x00007bf8 eip:0x00007d68 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8
 ```
 
-对应第一个被调用的函数`bootmain`，其`caller`的起始地址是`0x7c00`，栈底是`0x7bf8`，故`bootmain`的`ebp`是`0x7bf8`。`eip`是`bootmain`调用下一个函数返回后要执行的下一条指令地址，`args`是`bootmain`被调用的参数
+对应第一个被调用的函数`bootmain`，其`caller`的起始地址是`0x7c00`，栈底是`0x7bf8`，故`bootmain`的`ebp`是`0x7bf8`。`eip`是`bootmain`返回后要执行的下一条指令地址，`args`是`bootmain`被调用可能的参数。
 
 ## 练习六
 
@@ -512,4 +512,22 @@ ebp:0x00007bf8 eip:0x00007d68 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8
 
 >   offset      P DPL...        ss                    offset
 >
-> 31----16   15--------0   31------16         15-----0
+>   31----16   15--------0   31------16         15-----0
+
+
+
+> 2.请编程完善kern/trap/trap.c中对中断向量表进行初始化的函数idt_init。在idt_init函数中，依次对所有中断入口进行初始化。使用mmu.h中的SETGATE宏，填充idt数组内容。每个中断的入口由tools/vectors.c生成，使用trap.c中声明的vectors数组即可。
+
+这道题一开始没有找到`KERNEL_CS`以及中断号的宏定义，对`istrap`的使用有一些疑问。遇到了很多问题，看了一下答案实现了一个版本。由于文档中提示了中断号是`0-255`,所以我在实现时直接循环的`0-255`,题目中提示仅`T_SYSCALL`的DPL需要设置为USER，但是答案中`T_SWITCH_TOK`也存在特权级转换，于是将他们的DPL都设为了`USER`。
+
+找到`idr_pd`是一个内存单元：`./obj/kernel.sym:0010e560 idt_pd`，所以最后一句调用`lidt`使用内联汇编实现如下：
+
+````c
+asm ("lidt %0\n"::"m"(idt_pd));
+````
+
+
+
+> 3.请编程完善trap.c中的中断处理函数trap，在对时钟中断进行处理的部分填写trap函数中处理时钟中断的部分，使操作系统每遇到100次时钟中断后，调用print_ticks子程序，向屏幕上打印一行文字”100 ticks”。
+
+直接按照提示设置一个全局变量即可。

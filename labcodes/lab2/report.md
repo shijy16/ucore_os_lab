@@ -39,7 +39,6 @@
 int flag = 1;	//用来表示当前情况，1表示没有和其他块连接
 while (le != &free_list) {
 		p = le2page(le, page_link);
-		le = list_next(le);
 		if (base + base->property == p) {	//若尾部与其他块头部相接
 		    base->property += p->property;
             //头部和其他块相接，此时base已经在链表中，直接删去p并修改p的有效位
@@ -53,8 +52,8 @@ while (le != &free_list) {
 				list_del(&(p->page_link));
 				SetPageProperty(base);
 				ClearPageProperty(p);
-				flag = -1;
 			}
+            flag = 0;
             break;	//不可能再和后面的块连接在一块，故可以终止
 		}
     
@@ -66,19 +65,18 @@ while (le != &free_list) {
 			flag = 0;	//方便尾部还有相接块情况时判断。
 			ClearPageProperty(base);
 			base = p;
-		}
+		}     
+    	//若当前块已经大于base的尾部，无需继续遍历
+    	else if(base + base->property < p){
+            break;
+        }
+        le = list_next(le);
 	}
-	//如果没有和其他块合并，遍历链表找到相应位置
+	//若到最后还没将base加入链表，直接加入当前块的前一块即可；当前块只能是链表头（链表为空的情况）或者base后一块
 	if(flag){
-		le = list_next(&free_list);
-		while(le != &free_list){
-			p = le2page(le,page_link);
-			if(p > base + base->property){
-				break;	
-			}
-			le = list_next(le);
-		}
 		list_add_before(le,&(base->page_link));
+	}
+    nr_free += n;
 	}
 ````
 
@@ -86,3 +84,5 @@ while (le != &free_list) {
 
 + 释放算法
   + 在释放时，应该不需要遍历整个链表，只需要计算出相邻块并直接判断状态即可
+
+和答案相比，我的分配算法和答案一致，释放算法更加复杂，但只需要遍历一次链表中前一部分（地址小于base部分）即可，实际效率应该更高。

@@ -10,6 +10,7 @@
 #include <kdebug.h>
 
 #define TICK_NUM 100
+int cur_tick = 0;
 
 static void print_ticks() {
     cprintf("%d ticks\n",TICK_NUM);
@@ -46,6 +47,27 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
+
+	extern uintptr_t __vectors[];	
+	/* *
+	 * Set up a normal interrupt/trap gate descriptor
+	 *   - istrap: 1 for a trap (= exception) gate, 0 for an interrupt gate
+	 *   - sel: Code segment selector for interrupt/trap handler
+	 *   - off: Offset in code segment for interrupt/trap handler
+	 *   - dpl: Descriptor Privilege Level - the privilege level required
+	 *          for software to invoke this interrupt/trap gate explicitly
+	 *          using an int instruction.
+	 * */
+	//	SETGATE(gate, istrap, sel, off, dpl)
+	int i = 0;
+	for(i = 0;i < 256;i++ ){
+		int dpl = DPL_KERNEL;
+		if(i == T_SYSCALL || i == T_SWITCH_TOK){
+			dpl = DPL_USER;
+		}
+		SETGATE(idt[i],0,KERNEL_CS,__vectors[i],dpl);
+	}
+	asm ("lidt %0\n"::"m"(idt_pd));
 }
 
 static const char *
@@ -147,6 +169,10 @@ trap_dispatch(struct trapframe *tf) {
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
+		cur_tick++;
+		if(cur_tick % TICK_NUM == 0){
+				print_ticks();
+		}
         break;
     case IRQ_OFFSET + IRQ_COM1:
         c = cons_getc();

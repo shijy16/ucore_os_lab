@@ -326,7 +326,7 @@ pmm_init(void) {
 // return vaule: the kernel virtual address of this pte
 pte_t *
 get_pte(pde_t *pgdir, uintptr_t la, bool create) {
-    /* LAB2 EXERCISE 2: YOUR CODE
+    /* LAB2 EXERCISE 2: 2016011395
      *
      * If you need to visit a physical address, please use KADDR()
      * please read pmm.h for useful macros
@@ -347,18 +347,23 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
      *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable
      *   PTE_U           0x004                   // page table/directory entry flags bit : User can access
      */
-#if 0
-    pde_t *pdep = NULL;   // (1) find page directory entry
-    if (0) {              // (2) check if entry is not present
-                          // (3) check if creating is needed, then alloc page for page table
-                          // CAUTION: this page is used for page table, not for common data page
-                          // (4) set page reference
-        uintptr_t pa = 0; // (5) get linear address of page
-                          // (6) clear page content using memset
-                          // (7) set page directory entry's permission
+//#if 0
+    pde_t *pdep = PDX(la) + pgdir;				// (1) find page directory entry
+    if (*pdep & PTE_P == 0) {					// (2) check if entry is not present
+       struct Page* p;
+		if(create){								// (3) check if creating is needed, then alloc page for page table
+			p = alloc_page();		// CAUTION: this page is used for page table, not for common data page
+		}else{
+			return NULL;
+		}		
+		set_page_ref(p,1);						// (4) set page reference
+        uintptr_t pa = page2pa(p);		// (5) get linear address of page
+		memset(KADDR(pa),0,sizeof(struct Page*));		// (6) clear page content using memset
+		*pdep = page2pa(p)|PTE_P|PTE_W|PTE_U;	// (7) set page directory entry's permission
     }
-    return NULL;          // (8) return page table entry
-#endif
+	pte_t* pte = (pte_t *)KADDR(PDE_ADDR(*pdep)) + PTX(la);
+    return pte;								// (8) return page table entry
+//#endif
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir

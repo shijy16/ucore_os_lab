@@ -347,23 +347,22 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
      *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable
      *   PTE_U           0x004                   // page table/directory entry flags bit : User can access
      */
-//#if 0
-    pde_t *pdep = PDX(la) + pgdir;				// (1) find page directory entry
-    if (*pdep & PTE_P == 0) {					// (2) check if entry is not present
+    pde_t *pdep = pgdir + PDX(la);				// (1) find page directory entry
+    if ((*pdep & PTE_P) == 0) {					// (2) check if entry is not present
        struct Page* p;
 		if(create){								// (3) check if creating is needed, then alloc page for page table
 			p = alloc_page();		// CAUTION: this page is used for page table, not for common data page
 		}else{
 			return NULL;
-		}		
+		}	
+		if(p == NULL) return NULL;
 		set_page_ref(p,1);						// (4) set page reference
         uintptr_t pa = page2pa(p);		// (5) get linear address of page
-		memset(KADDR(pa),0,sizeof(struct Page*));		// (6) clear page content using memset
+		memset(KADDR(pa),0,PGSIZE);		// (6) clear page content using memset
 		*pdep = page2pa(p)|PTE_P|PTE_W|PTE_U;	// (7) set page directory entry's permission
     }
 	pte_t* pte = (pte_t *)KADDR(PDE_ADDR(*pdep)) + PTX(la);
     return pte;								// (8) return page table entry
-//#endif
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -384,7 +383,7 @@ get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store) {
 //note: PT is changed, so the TLB need to be invalidate 
 static inline void
 page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
-    /* LAB2 EXERCISE 3: YOUR CODE
+    /* LAB2 EXERCISE 3: 2016011395
      *
      * Please check if ptep is valid, and tlb must be manually updated if mapping is updated
      *
@@ -400,15 +399,15 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
      * DEFINEs:
      *   PTE_P           0x001                   // page table/directory entry flags bit : Present
      */
-#if 0
-    if (0) {                      //(1) check if this page table entry is present
-        struct Page *page = NULL; //(2) find corresponding page to pte
-                                  //(3) decrease page reference
-                                  //(4) and free this page when page reference reachs 0
-                                  //(5) clear second page table entry
-                                  //(6) flush tlb
+	if ((*ptep & PTE_P) == 1) {						//(1) check if this page table entry is present
+        struct Page *page = pte2page(*ptep);		//(2) find corresponding page to pte
+		page_ref_dec(page);                         //(3) decrease page reference
+        if(page->ref == 0){                    //(4) and free this page when page reference reachs 0
+			free_page(page);
+		}
+		*ptep = NULL;								//(5) clear second page table entry
+		tlb_invalidate(pgdir,la);					//(6) flush tlb
     }
-#endif
 }
 
 //page_remove - free an Page which is related linear address la and has an validated pte

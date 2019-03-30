@@ -51,7 +51,12 @@ _clk_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int 
     //record the page access situlation
     /*LAB3 EXERCISE 2: 2016011395*/ 
     //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
-	list_add_after(head,entry); 
+	if(clk_ptr == NULL){
+		list_add_before(head,entry);
+		clk_ptr = head;
+	}else{
+		list_add_before(clk_ptr,entry);
+	}
 	return 0;
 }
 /*
@@ -66,53 +71,94 @@ _clk_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
      assert(in_tick==0);
      /* Select the victim */
      /*LAB3 EXERCISE 2: 2016011395*/ 
-     //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
-     //(2)  assign the value of *ptr_page to the addr of this page
-	 *ptr_page = le2page(head->prev,pra_page_link);
-	 list_del(head->prev);
+	 if(clk_ptr == NULL){
+		clk_ptr = head->next;
+	 }
+	 if(clk_ptr == head){
+		clk_ptr = clk_ptr->next;
+	 }
+	 struct Page* p_clk = le2page(clk_ptr,pra_page_link);
+	 pte_t* pte_clk = get_pte(mm->pgdir,p_clk->pra_vaddr,0);
+	 while(1){
+		if(*pte_clk&PTE_A){
+			*pte_clk = *pte_clk&(~PTE_A);
+			tlb_invalidate(mm->pgdir,p_clk->pra_vaddr);
+		}else{
+			if(*pte_clk&PTE_D){
+				swapfs_write((p_clk->pra_vaddr/PGSIZE+1)<<8,p_clk);
+				*pte_clk &= ~PTE_D;
+			}else{
+				*ptr_page = p_clk;
+				clk_ptr = clk_ptr->next;
+				break;
+			}
+		}
+		clk_ptr = clk_ptr->next;
+		if(clk_ptr == head){
+			clk_ptr = clk_ptr->next;
+		}
+		p_clk = le2page(clk_ptr,pra_page_link);
+		pte_clk = get_pte(mm->pgdir,p_clk->pra_vaddr,0);
+	 }
+
+	 
 	 return 0;
 }
 
 static int
 _clk_check_swap(void) {
-    cprintf("write Virt Page c in clk_check_swap\n");
-    *(unsigned char *)0x3000 = 0x0c;
-    assert(pgfault_num==4);
-    cprintf("write Virt Page a in clk_check_swap\n");
-    *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num==4);
-    cprintf("write Virt Page d in clk_check_swap\n");
-    *(unsigned char *)0x4000 = 0x0d;
-    assert(pgfault_num==4);
-    cprintf("write Virt Page b in clk_check_swap\n");
-    *(unsigned char *)0x2000 = 0x0b;
-    assert(pgfault_num==4);
-    cprintf("write Virt Page e in clk_check_swap\n");
-    *(unsigned char *)0x5000 = 0x0e;
-    assert(pgfault_num==5);
-    cprintf("write Virt Page b in clk_check_swap\n");
-    *(unsigned char *)0x2000 = 0x0b;
-    assert(pgfault_num==5);
-    cprintf("write Virt Page a in clk_check_swap\n");
-    *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num==6);
-    cprintf("write Virt Page b in clk_check_swap\n");
-    *(unsigned char *)0x2000 = 0x0b;
-    assert(pgfault_num==7);
-    cprintf("write Virt Page c in clk_check_swap\n");
-    *(unsigned char *)0x3000 = 0x0c;
-    assert(pgfault_num==8);
-    cprintf("write Virt Page d in clk_check_swap\n");
-    *(unsigned char *)0x4000 = 0x0d;
-    assert(pgfault_num==9);
-    cprintf("write Virt Page e in clk_check_swap\n");
-    *(unsigned char *)0x5000 = 0x0e;
-    assert(pgfault_num==10);
-    cprintf("write Virt Page a in clk_check_swap\n");
+    pde_t *pgdir = KADDR((pde_t *)rcr3());
+    int i;
+	for (i = 0; i < 4; ++i) {
+        pte_t *ptep = get_pte(pgdir, (i + 1) * 0x1000, 0);
+        assert(*ptep & PTE_P);
+        assert(swapfs_write(((i + 1) * 0x1000 / PGSIZE + 1) << 8, pte2page(*ptep)) == 0);
+        *ptep &= ~(PTE_A | PTE_D);
+        tlb_invalidate(pgdir, (i + 1) * 0x1000);
+    }
+    assert(pgfault_num == 4);
+    cprintf("read Virt Page c in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x3000 == 0x0c);
+    assert(pgfault_num == 4);
+    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
     assert(*(unsigned char *)0x1000 == 0x0a);
     *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num==11);
-    return 0;
+    assert(pgfault_num == 4);
+    cprintf("read Virt Page d in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x4000 == 0x0d);
+    assert(pgfault_num == 4);
+    cprintf("write Virt Page b in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x2000 == 0x0b);
+    *(unsigned char *)0x2000 = 0x0b;
+    assert(pgfault_num == 4);
+    cprintf("read Virt Page e in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x5000 == 0x00);
+    assert(pgfault_num == 5);
+    cprintf("read Virt Page b in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x2000 == 0x0b);
+    assert(pgfault_num == 5);
+    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x1000 == 0x0a);
+    *(unsigned char *)0x1000 = 0x0a;
+    assert(pgfault_num == 5);
+    cprintf("read Virt Page b in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x2000 == 0x0b);
+    assert(pgfault_num == 5);
+    cprintf("read Virt Page c in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x3000 == 0x0c);
+    assert(pgfault_num == 6);
+    cprintf("read Virt Page d in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x4000 == 0x0d);
+    assert(pgfault_num == 7);
+    cprintf("write Virt Page e in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x5000 == 0x00);
+    *(unsigned char *)0x5000 = 0x0e;
+    assert(pgfault_num == 7);
+    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
+    assert(*(unsigned char *)0x1000 == 0x0a);
+    *(unsigned char *)0x1000 = 0x0a;
+    assert(pgfault_num == 7);
+    return 0; 
 }
 
 

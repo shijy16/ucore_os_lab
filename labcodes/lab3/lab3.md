@@ -79,7 +79,11 @@
 
 ## 扩展练习 Challenge 1：实现识别dirty bit的 extended clock页替换算法（需要编程）
 
-> 本练习代码位于`swap_clk.h`和`swap_clk.c`中，lab3_challenge分支中可直接`make qemu`运行。
+> 本练习代码位于
+>
+> [lab3_challenge分支]: https://github.com/oscourse-tsinghua/os2019-shijy16/tree/lab3-challenge/labcodes/lab3
+>
+> 的`swap_clk.h`和`swap_clk.c`中，该分支中可直接`make qemu`运行。
 
 ### 设计
 

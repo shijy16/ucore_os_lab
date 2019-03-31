@@ -347,16 +347,6 @@ quick_check 'check vmm'                                         \
 
 pts=20
 quick_check 'check swap page fault'                             \
-    'page fault at 0x00001000: K/W [no page found].'            \
-    'page fault at 0x00002000: K/W [no page found].'            \
-    'page fault at 0x00003000: K/W [no page found].'            \
-    'page fault at 0x00004000: K/W [no page found].'            \
-    'write Virt Page e in fifo_check_swap'			\
-    'page fault at 0x00005000: K/W [no page found].'		\
-    'page fault at 0x00001000: K/W [no page found]'		\
-    'page fault at 0x00002000: K/W [no page found].'		\
-    'page fault at 0x00003000: K/W [no page found].'		\
-    'page fault at 0x00004000: K/W [no page found].'		\
     'check_swap() succeeded!'
 
 pts=5

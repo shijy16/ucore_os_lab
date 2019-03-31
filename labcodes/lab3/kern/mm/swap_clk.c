@@ -107,7 +107,8 @@ _clk_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
 
 static int
 _clk_check_swap(void) {
-    pde_t *pgdir = KADDR((pde_t *)rcr3());
+	//copied from twd2
+	pde_t *pgdir = KADDR((pde_t *)rcr3());
     int i;
 	for (i = 0; i < 4; ++i) {
         pte_t *ptep = get_pte(pgdir, (i + 1) * 0x1000, 0);

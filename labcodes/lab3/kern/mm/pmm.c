@@ -367,7 +367,7 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
 			p = alloc_page();		// CAUTION: this page is used for page table, not for common data page
 		}else{
 			return NULL;
-    }
+		}
 		if(p == NULL) return NULL;
 		set_page_ref(p,1);						// (4) set page reference
         uintptr_t pa = page2pa(p);		// (5) get linear address of page

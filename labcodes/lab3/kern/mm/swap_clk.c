@@ -52,8 +52,8 @@ _clk_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int 
     /*LAB3 EXERCISE 2: 2016011395*/ 
     //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
 	if(clk_ptr == NULL){
-		list_add_before(head,entry);
-		clk_ptr = head;
+		clk_ptr = head->next;
+		list_add_before(clk_ptr,entry);
 	}else{
 		list_add_before(clk_ptr,entry);
 	}
@@ -100,66 +100,56 @@ _clk_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
 		p_clk = le2page(clk_ptr,pra_page_link);
 		pte_clk = get_pte(mm->pgdir,p_clk->pra_vaddr,0);
 	 }
-
-	 
 	 return 0;
 }
 
 static int
 _clk_check_swap(void) {
-	//copied from twd2
-	pde_t *pgdir = KADDR((pde_t *)rcr3());
     int i;
-	for (i = 0; i < 4; ++i) {
-        pte_t *ptep = get_pte(pgdir, (i + 1) * 0x1000, 0);
-        assert(*ptep & PTE_P);
-        assert(swapfs_write(((i + 1) * 0x1000 / PGSIZE + 1) << 8, pte2page(*ptep)) == 0);
-        *ptep &= ~(PTE_A | PTE_D);
-        tlb_invalidate(pgdir, (i + 1) * 0x1000);
-    }
+	for (i = 1; i < 5; i++) {
+		pte_t *ptep = get_pte(KADDR(rcr3()), i * 0x1000, 0);
+		*ptep &= ~PTE_A;
+		if(*ptep & PTE_D){
+			swapfs_write((i * 0x1000 / PGSIZE + 1) << 8, pte2page(*ptep));
+			*ptep &= ~PTE_D;
+		}
+        tlb_invalidate(KADDR(rcr3()), i * 0x1000);
+	}
+	clk_ptr = NULL;
     assert(pgfault_num == 4);
-    cprintf("read Virt Page c in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x3000 == 0x0c);
-    assert(pgfault_num == 4);
-    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x1000 == 0x0a);
-    *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num == 4);
-    cprintf("read Virt Page d in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x4000 == 0x0d);
-    assert(pgfault_num == 4);
-    cprintf("write Virt Page b in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x2000 == 0x0b);
-    *(unsigned char *)0x2000 = 0x0b;
-    assert(pgfault_num == 4);
-    cprintf("read Virt Page e in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x5000 == 0x00);
-    assert(pgfault_num == 5);
-    cprintf("read Virt Page b in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x2000 == 0x0b);
-    assert(pgfault_num == 5);
-    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x1000 == 0x0a);
-    *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num == 5);
-    cprintf("read Virt Page b in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x2000 == 0x0b);
-    assert(pgfault_num == 5);
-    cprintf("read Virt Page c in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x3000 == 0x0c);
-    assert(pgfault_num == 6);
-    cprintf("read Virt Page d in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x4000 == 0x0d);
-    assert(pgfault_num == 7);
-    cprintf("write Virt Page e in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x5000 == 0x00);
-    *(unsigned char *)0x5000 = 0x0e;
-    assert(pgfault_num == 7);
-    cprintf("write Virt Page a in extclk_dirty_check_swap\n");
-    assert(*(unsigned char *)0x1000 == 0x0a);
-    *(unsigned char *)0x1000 = 0x0a;
-    assert(pgfault_num == 7);
-    return 0; 
+    cprintf("write e\n");
+	*(unsigned char*)0x5000 = 0x0e;
+	assert(pgfault_num == 5);
+	cprintf("read e\n");
+	assert(*(unsigned char*)0x5000 == 0x0e);
+	assert(pgfault_num == 5);
+	cprintf("read a\n");
+	assert(*(unsigned char*)0x1000 == 0x0a);
+	assert(pgfault_num == 6);
+	cprintf("read c\n");
+	assert(*(unsigned char*)0x3000 == 0x0c);
+	assert(pgfault_num == 6);
+	cprintf("read b\n");
+	assert(*(unsigned char*)0x2000 == 0x0b);
+	assert(pgfault_num == 7);
+	cprintf("write d\n");
+	*(unsigned char*)0x4000 = 0x0;
+	assert(pgfault_num == 8);
+	cprintf("read a\n");
+	assert(*(unsigned char*)0x1000 == 0x0a);
+	assert(pgfault_num == 8);
+	cprintf("read c\n");
+	assert(*(unsigned char*)0x3000 == 0x0c);
+	assert(pgfault_num == 9);
+	cprintf("read e,a\n");
+	assert(*(unsigned char*)0x5000 == 0x0e);
+	assert(*(unsigned char*)0x1000 == 0x0a);
+	assert(pgfault_num == 9);
+	cprintf("read b\n");
+	assert(*(unsigned char*)0x2000 == 0x0b);
+	assert(pgfault_num == 10);
+	assert(*(unsigned char*)0x4000 == 0x0);	
+	return 0; 
 }
 
 

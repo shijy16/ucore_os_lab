@@ -103,17 +103,18 @@ alloc_proc(void) {
      *       uint32_t flags;                             // Process flag
      *       char name[PROC_NAME_LEN + 1];               // Process name
      */
-     //LAB5 2016011395 : (update LAB4 steps)
+   	memset(proc,0,sizeof(struct proc_struct));
+	proc->state=PROC_UNINIT;
+	proc->pid = -1;
+	proc->cr3 = boot_cr3;
+
+  //LAB5 YOUR CODE : (update LAB4 steps)
     /*
      * below fields(add in LAB5) in proc_struct need to be initialized	
      *       uint32_t wait_state;                        // waiting state
      *       struct proc_struct *cptr, *yptr, *optr;     // relations between processes
 	 */
-		memset(proc,0,sizeof(struct proc_struct));
-		proc->state=PROC_UNINIT;
-		proc->pid = -1;
-		proc->cr3 = boot_cr3;
-     //LAB6 2016011395 : (update LAB5 steps)
+     //LAB6 YOUR CODE : (update LAB5 steps)
     /*
      * below fields(add in LAB6) in proc_struct need to be initialized
      *     struct run_queue *rq;                       // running queue contains Process
@@ -123,9 +124,8 @@ alloc_proc(void) {
      *     uint32_t lab6_stride;                       // FOR LAB6 ONLY: the current stride of the process
      *     uint32_t lab6_priority;                     // FOR LAB6 ONLY: the priority of process, set by lab6_set_priority(uint32_t)
      */
+	list_init(&proc->run_link);
         skew_heap_init(&proc->lab6_run_pool);
-        list_init(&proc->run_link);
-
     }
     return proc;
 }
@@ -415,15 +415,16 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 	if((proc = alloc_proc()) == NULL){
 		goto fork_out;
 	}
+	proc->parent = current;
 	if(setup_kstack(proc) != 0){
-		goto bad_fork_cleanup_kstack;
+		goto bad_fork_cleanup_proc;
 	}
 	if(copy_mm(clone_flags,proc) != 0){
-		goto bad_fork_cleanup_proc;
+		goto bad_fork_cleanup_kstack;
 	}
 	copy_thread(proc,stack,tf);
 	bool intr_flag;
-	proc->parent = current;
+	
 	local_intr_save(intr_flag);
     {
 		proc->pid = get_pid();

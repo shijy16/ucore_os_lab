@@ -242,19 +242,15 @@ trap_dispatch(struct trapframe *tf) {
     LAB3 : If some page replacement algorithm(such as CLOCK PRA) need tick to change the priority of pages,
     then you can add code here. 
 #endif
-        /* LAB1 YOUR CODE : STEP 3 */
+        /* LAB1 2016011395 : STEP 3 */
         /* handle the timer interrupt */
         /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
-		cur_tick++;
-		// if(cur_tick % TICK_NUM == 0){
-				// print_ticks();
-                current->need_resched = 1;
-                sched_class_proc_tick(current);
-		// }
-		/* LAB5 2016011395 */
+	ticks++;
+ 	sched_class_proc_tick(current);
+        /* LAB5 2016011395 */
         /* you should upate you lab1 code (just add ONE or TWO lines of code):
          *    Every TICK_NUM cycle, you should set current process's current->need_resched = 1
          */

@@ -19,6 +19,8 @@
 
 #define TICK_NUM 100
 
+int cur_tick = 0;
+
 static void print_ticks() {
     cprintf("%d ticks\n",TICK_NUM);
 #ifdef DEBUG_GRADE
@@ -42,7 +44,7 @@ static struct pseudodesc idt_pd = {
 /* idt_init - initialize IDT to each of the entry points in kern/trap/vectors.S */
 void
 idt_init(void) {
-     /* LAB1 YOUR CODE : STEP 2 */
+     /* LAB1 2016011395 : STEP 2 */
      /* (1) Where are the entry addrs of each Interrupt Service Routine (ISR)?
       *     All ISR's entry addrs are stored in __vectors. where is uintptr_t __vectors[] ?
       *     __vectors[] is in kern/trap/vector.S which is produced by tools/vector.c
@@ -54,7 +56,33 @@ idt_init(void) {
       *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
       *     Notice: the argument of lidt is idt_pd. try to find it!
       */
-     /* LAB5 YOUR CODE */ 
+
+	extern uintptr_t __vectors[];	
+	/* *
+	 * Set up a normal interrupt/trap gate descriptor
+	 *   - istrap: 1 for a trap (= exception) gate, 0 for an interrupt gate
+	 *   - sel: Code segment selector for interrupt/trap handler
+	 *   - off: Offset in code segment for interrupt/trap handler
+	 *   - dpl: Descriptor Privilege Level - the privilege level required
+	 *          for software to invoke this interrupt/trap gate explicitly
+	 *          using an int instruction.
+	 * */
+	//	SETGATE(gate, istrap, sel, off, dpl)
+	int i = 0;
+	for(i = 0;i < 256;i++ ){
+		int dpl = DPL_KERNEL;
+        int istrap = 0;
+		if(i == T_SYSCALL || i == T_SWITCH_TOK){
+			dpl = DPL_USER;
+            if(i == T_SYSCALL){
+                istrap = 1;
+            }
+        }
+
+		SETGATE(idt[i],istrap,KERNEL_CS,__vectors[i],dpl);
+	}
+	asm ("lidt %0\n"::"m"(idt_pd));
+	/* LAB5 2016011395 */ 
      //you should update your lab1 code (just add ONE or TWO lines of code), let user app to use syscall to get the service of ucore
      //so you should setup the syscall interrupt gate in here
 }
@@ -220,11 +248,17 @@ trap_dispatch(struct trapframe *tf) {
          * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
          * (3) Too Simple? Yes, I think so!
          */
-        /* LAB5 YOUR CODE */
+		cur_tick++;
+		if(cur_tick % TICK_NUM == 0){
+				// print_ticks();
+                current->need_resched = 1;
+                sched_class_proc_tick(current);
+		}
+		/* LAB5 2016011395 */
         /* you should upate you lab1 code (just add ONE or TWO lines of code):
          *    Every TICK_NUM cycle, you should set current process's current->need_resched = 1
          */
-        /* LAB6 YOUR CODE */
+        /* LAB6 2016011395 */
         /* you should upate you lab5 code
          * IMPORTANT FUNCTIONS:
 	     * sched_class_proc_tick

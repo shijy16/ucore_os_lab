@@ -129,7 +129,8 @@ alloc_proc(void) {
      */
 	list_init(&proc->run_link);
     skew_heap_init(&proc->lab6_run_pool);
-	//LAB8:EXERCISE2 YOUR CODE HINT:need add some code to init fs in proc_struct, ...
+	//LAB8:EXERCISE2 2016011395 HINT:need add some code to init fs in proc_struct, ...
+    
     }
     return proc;
 }
@@ -435,7 +436,7 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     }
     ret = -E_NO_MEM;
     //LAB4:EXERCISE2 2016011395
-    //LAB8:EXERCISE2 YOUR CODE  HINT:how to copy the fs in parent's proc_struct?
+    //LAB8:EXERCISE2 2016011395  HINT:how to copy the fs in parent's proc_struct?
     /*
      * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
      * MACROs or Functions:
@@ -470,6 +471,9 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
 	if(copy_mm(clone_flags,proc) != 0){
 		goto bad_fork_cleanup_kstack;
 	}
+    if(copy_files(clone_flags,proc) != 0){
+        goto bad_fork_cleanup_fs;
+    }
 	copy_thread(proc,stack,tf);
 	bool intr_flag;
 
@@ -578,7 +582,7 @@ load_icode_read(int fd, void *buf, size_t len, off_t offset) {
   
 static int
 load_icode(int fd, int argc, char **kargv) {
-    /* LAB8:EXERCISE2 YOUR CODE  HINT:how to load the file with handler fd  in to process's memory? how to setup argc/argv?
+    /* LAB8:2016011395  HINT:how to load the file with handler fd  in to process's memory? how to setup argc/argv?
      * MACROs or Functions:
      *  mm_create        - create a mm
      *  setup_pgdir      - setup pgdir in mm
@@ -602,6 +606,149 @@ load_icode(int fd, int argc, char **kargv) {
      * (7) setup trapframe for user environment
      * (8) if up steps failed, you should cleanup the env.
      */
+    #define ERROR_CHECK if(ret != 0) return ret;
+    //(1) create a new mm for current process
+    int ret = -1;
+    struct mm_struct *mm;
+    mm = mm_create();
+    //(2) create a new PDT, and mm->pgdir= kernel virtual addr of PDT
+    ret = setup_pgdir(mm);
+    ERROR_CHECK;
+    //(3) copy TEXT/DATA/BSS parts in binary to memory space of process
+    //(3.1) read raw data content in file and resolve elfhdr
+    struct elfhdr elf_header, *eh = &elf_header;
+    ret = load_icode_read(fd, eh, sizeof(struct elfhdr), 0);
+    ERROR_CHECK;
+    if (eh->e_magic != ELF_MAGIC) {
+        ret = -E_INVAL_ELF;
+        return ret;
+    }
+
+    //(3.2) read raw data content in file and resolve proghdr based on info in elfhdr
+    struct proghdr prog_header, *ph = &prog_header;
+    uint32_t vm_flags = 0, perm = 0;
+    int i;
+    for(i = 0;i < eh->e_phnum;i++){
+        off_t ph_off = eh->e_phoff + i * sizeof(struct proghdr);
+        ret = load_icode_read(fd,ph,sizeof(struct proghdr),ph_off);
+        ERROR_CHECK;
+        if (ph->p_type != ELF_PT_LOAD) {
+            continue ;
+        }
+
+        if (ph->p_filesz > ph->p_memsz) {
+            ret = -E_INVAL_ELF;
+            ERROR_CHECK;
+        }
+        if (ph->p_filesz == 0) {
+            continue ;
+        }
+
+        vm_flags = 0;
+        perm = PTE_U;
+        if (ph->p_flags & ELF_PF_X){
+            vm_flags |= VM_EXEC;
+        }
+        if (ph->p_flags & ELF_PF_W){
+            vm_flags |= VM_WRITE;
+            perm |= PTE_W;
+        }
+        if (ph->p_flags & ELF_PF_R){
+            vm_flags |= VM_READ;
+        }
+        //(3.3) call mm_map to build vma related to TEXT/DATA
+        ret = mm_map(mm, ph->p_va, ph->p_memsz, vm_flags, NULL);
+        ERROR_CHECK;
+
+        uintptr_t start = ph->p_va;
+        uintptr_t end = ph->p_va + ph->p_filesz;
+        uintptr_t la = ROUNDDOWN(start, PGSIZE);
+        uint32_t size;
+        uint32_t pg_off, pro_off = ph->p_offset;
+        struct Page *page;
+        //(3.4) call pgdir_alloc_page to allocate page for TEXT/DATA, read contents in file and copy them into the new allocated pages
+        while(start < end){
+            page = pgdir_alloc_page(mm->pgdir, la, perm);
+            assert(page != NULL);
+            pg_off = start - la;
+            size = PGSIZE - pg_off;
+            la += PGSIZE;
+            if (end < la) {
+                size -= la - end;
+            }
+            ret = load_icode_read(fd, page2kva(page) + pg_off, size, pro_off);
+            ERROR_CHECK;
+            start += size;
+            pro_off += size;
+        }
+
+        end = ph->p_va + ph->p_memsz;
+        //(3.5) callpgdir_alloc_page to allocate pages for BSS, memset zero in these pages
+        if(start < la){
+            if(start == end) continue;
+            pg_off = start +PGSIZE - la;
+            size = PGSIZE - pg_off;
+            if (end < la) {
+                size -= la - end;
+            }
+            memset(page2kva(page) + pg_off, 0, size);
+            start += size;
+        }
+
+        while(start < end){
+            page = pgdir_alloc_page(mm->pgdir, la, perm);
+            assert(page != NULL);
+            pg_off = start - la;
+            size = PGSIZE - pg_off;
+            la += PGSIZE;
+            if (end < la) {
+                size -= la - end;
+            }
+            start += size;
+            memset(page2kva(page) + pg_off, 0, size);
+        }
+    }
+    sysfile_close(fd);
+    //(4) call mm_map to setup user stack, and put parameters into user stack
+    vm_flags = VM_READ | VM_WRITE | VM_STACK;
+    ret = mm_map(mm, USTACKTOP - USTACKSIZE, USTACKSIZE, vm_flags, NULL);
+    ERROR_CHECK;
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-2*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PGSIZE , PTE_USER) != NULL);
+    assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
+    //(5) set current process's mm, sr3, and set CR3 reg = physical addr of Page Directory
+    mm_count_inc(mm);
+    current->mm = mm;
+    current->cr3 = PADDR(mm->pgdir);
+    lcr3(PADDR(mm->pgdir));
+    //(6) setup uargc and uargv in user stacks
+    uintptr_t stack = USTACKTOP;
+    char *uargv[EXEC_MAX_ARG_NUM];
+    uargv[argc] = NULL; 
+    int j;
+    for(j = 0;j < argc;j++){
+        size_t str_size = strlen(kargv[j]) + 1;
+        stack -= str_size;
+        uargv[j] = (char *) stack;
+        strcpy(uargv[j], kargv[j]);
+    }
+    stack = ROUNDDOWN(stack, sizeof(uintptr_t));
+    size_t argv_size = sizeof(char *) * (argc + 1);
+    stack -= argv_size;
+    memcpy(stack, uargv, argv_size);
+    stack -= sizeof(uintptr_t);
+    *(uintptr_t *)stack = argc;
+    //(7) setup trapframe for user environment
+    struct trapframe *tf = current->tf;
+    memset(tf, 0, sizeof(struct trapframe));
+    tf->tf_cs = USER_CS;
+    tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+    tf->tf_esp = stack;
+    tf->tf_eip = eh->e_entry;
+    tf->tf_eflags |= FL_IF;
+
+    return 0;
 }
 
 // this function isn't very correct in LAB8
